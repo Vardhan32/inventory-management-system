@@ -162,8 +162,10 @@ def seed():
 
             current = item["quantity_on_hand"]
             adjusted = index % 4 == 0
+            adjust_delta = 2 if index % 6 == 0 else -2
             sold = min(max(current // 3, 4), 28)
-            opening = current + sold + (2 if adjusted else 0)
+            before_adjustment = current - (adjust_delta if adjusted else 0)
+            opening = before_adjustment + sold
 
             db.add(
                 StockTransaction(
@@ -174,21 +176,20 @@ def seed():
                     resulting_quantity=opening,
                     reference=f"GRN-{1010 + index}",
                     note="Opening stock received",
-                    created_at=now - timedelta(days=32 + (index % 6), hours=index),
+                    created_at=now - timedelta(days=25 + (index % 10), hours=9 + (index % 6)),
                 )
             )
 
-            first_result = opening - sold - (2 if adjusted else 0)
             db.add(
                 StockTransaction(
                     product_id=product.id,
                     type="out",
-                    quantity=sold + (2 if adjusted else 0),
+                    quantity=sold,
                     previous_quantity=opening,
-                    resulting_quantity=first_result,
+                    resulting_quantity=before_adjustment,
                     reference=f"SO-{2300 + index}",
                     note="Customer order",
-                    created_at=now - timedelta(days=14 + (index % 5), hours=index),
+                    created_at=now - timedelta(days=6 + (index % 8), hours=13 + (index % 5)),
                 )
             )
 
@@ -198,11 +199,11 @@ def seed():
                         product_id=product.id,
                         type="adjustment",
                         quantity=current,
-                        previous_quantity=first_result,
+                        previous_quantity=before_adjustment,
                         resulting_quantity=current,
                         reference=f"CC-{500 + index}",
                         note="Cycle count correction",
-                        created_at=now - timedelta(days=4, hours=index),
+                        created_at=now - timedelta(days=2 + (index // 4), hours=9 + (index % 7)),
                     )
                 )
 
