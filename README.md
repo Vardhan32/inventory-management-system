@@ -55,7 +55,7 @@ backend/
     services.py       stock movement and ledger logic
     errors.py         application error type
     seed.py           demo products and movement history
-  tests/              17 API tests
+  tests/              18 API tests
   schema.sql          MySQL DDL
   .env.example        MySQL connection example
 frontend/

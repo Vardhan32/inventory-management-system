@@ -104,3 +104,61 @@ def test_transaction_filters_and_pagination(client, create_product):
     assert len(first_page["items"]) == 2
     assert first_page["total"] == 4
     assert first_page["pages"] == 2
+
+
+def test_sequential_ledger_balance_integrity(client, create_product):
+    product = create_product(sku="SKU-BAL-01", name="Ledger Audit Item", quantity_on_hand=50)
+
+    # 1. Stock In: 30
+    client.post(
+        f"/api/products/{product['id']}/stock",
+        json={"type": "in", "quantity": 30, "reference": "REC-01"},
+    )
+    # 2. Stock Out: 20
+    client.post(
+        f"/api/products/{product['id']}/stock",
+        json={"type": "out", "quantity": 20, "reference": "DISP-01"},
+    )
+    # 3. Stock Out: 15
+    client.post(
+        f"/api/products/{product['id']}/stock",
+        json={"type": "out", "quantity": 15, "reference": "DISP-02"},
+    )
+    # 4. Adjustment to 40 (physical cycle count)
+    client.post(
+        f"/api/products/{product['id']}/stock",
+        json={"type": "adjustment", "quantity": 40, "reference": "CYCLE-01"},
+    )
+
+    updated = client.get(f"/api/products/{product['id']}").json()
+    assert updated["quantity_on_hand"] == 40
+
+    txs = client.get(f"/api/transactions?product_id={product['id']}&per_page=10").json()["items"]
+    # 5 transactions total (1 opening + 4 movements)
+    assert len(txs) == 5
+
+    # Check chain of continuity from newest to oldest
+    # Newest: adjustment from 45 -> 40
+    assert txs[0]["type"] == "adjustment"
+    assert txs[0]["previous_quantity"] == 45
+    assert txs[0]["resulting_quantity"] == 40
+
+    # Next: out 15 (60 -> 45)
+    assert txs[1]["type"] == "out"
+    assert txs[1]["previous_quantity"] == 60
+    assert txs[1]["resulting_quantity"] == 45
+
+    # Next: out 20 (80 -> 60)
+    assert txs[2]["type"] == "out"
+    assert txs[2]["previous_quantity"] == 80
+    assert txs[2]["resulting_quantity"] == 60
+
+    # Next: in 30 (50 -> 80)
+    assert txs[3]["type"] == "in"
+    assert txs[3]["previous_quantity"] == 50
+    assert txs[3]["resulting_quantity"] == 80
+
+    # Oldest: opening in 50 (0 -> 50)
+    assert txs[4]["type"] == "in"
+    assert txs[4]["previous_quantity"] == 0
+    assert txs[4]["resulting_quantity"] == 50

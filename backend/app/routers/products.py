@@ -30,8 +30,13 @@ SORTING = {
 }
 
 
-def get_product_or_404(db: Session, product_id: int):
-    product = db.get(Product, product_id)
+def get_product_or_404(db: Session, product_id: int, for_update: bool = False):
+    if for_update:
+        product = db.execute(
+            select(Product).where(Product.id == product_id).with_for_update()
+        ).scalar_one_or_none()
+    else:
+        product = db.get(Product, product_id)
     if product is None:
         raise InventoryError("Product not found.", 404)
     return product
@@ -145,7 +150,7 @@ def update_product(
     payload: ProductUpdate,
     db: Session = Depends(get_db),
 ):
-    product = get_product_or_404(db, product_id)
+    product = get_product_or_404(db, product_id, for_update=True)
     updates = payload.model_dump(exclude_unset=True)
 
     if not updates:
@@ -169,7 +174,7 @@ def update_product(
 
 @router.delete("/{product_id}", status_code=204)
 def archive_product(product_id: int, db: Session = Depends(get_db)):
-    product = get_product_or_404(db, product_id)
+    product = get_product_or_404(db, product_id, for_update=True)
     product.is_active = False
     db.commit()
     return Response(status_code=204)
@@ -181,7 +186,7 @@ def record_stock(
     payload: StockMovement,
     db: Session = Depends(get_db),
 ):
-    product = get_product_or_404(db, product_id)
+    product = get_product_or_404(db, product_id, for_update=True)
 
     try:
         transaction = apply_stock_movement(
